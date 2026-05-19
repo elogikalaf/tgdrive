@@ -152,6 +152,7 @@ class GoogleDriveService:
     def _list_files_sync(self, user: User, limit: int) -> list[dict[str, Any]]:
         service = self._service_for_user(user)
         folder_id = user.google_folder_id or "root"
+        folder_path = self._folder_path(service, user.google_folder_id)
         query = f"trashed = false and '{folder_id}' in parents"
         result = (
             service.files()
@@ -167,6 +168,7 @@ class GoogleDriveService:
         for item in files:
             if item.get("id"):
                 item["downloadLink"] = direct_download_url(item["id"])
+            item["folderPath"] = folder_path
         return files
 
     def _delete_file_sync(self, user: User, file_id: str) -> None:
@@ -253,6 +255,16 @@ class GoogleDriveService:
             fields="id",
         ).execute()
         logger.info("Made Drive file public telegram_id=%s file_id=%s", telegram_id, file_id)
+
+    def _folder_path(self, service, folder_id: str | None) -> str:
+        if not folder_id:
+            return "Drive root"
+        try:
+            folder = service.files().get(fileId=folder_id, fields="name").execute()
+        except HttpError:
+            logger.warning("Could not resolve Drive folder name folder_id=%s", folder_id)
+            return f"Drive root / {folder_id}"
+        return f"Drive root / {folder.get('name', folder_id)}"
 
 
 def _escape_drive_query_string(value: str) -> str:

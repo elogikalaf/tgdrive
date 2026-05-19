@@ -131,14 +131,25 @@ def register_command_handlers(
 
         lines = ["Recent files:"]
         buttons: list[list[InlineKeyboardButton]] = []
-        for item in drive_files:
+        for index, item in enumerate(drive_files, start=1):
             name = item.get("name", "Untitled")
             file_id = item.get("id", "")
             size = _format_size(item.get("size"))
             download_link = item.get("downloadLink", "")
-            lines.append(f"- {name} ({size})\n  `{file_id}`\n  {download_link}")
+            view_link = item.get("webViewLink", "")
+            folder_path = item.get("folderPath", "Drive root")
+            lines.append(
+                f"{index}. `{name}`\n"
+                f"   Size: {size}\n"
+                f"   Path: {folder_path}\n"
+                f"   ID: `{file_id}`"
+            )
             if file_id:
-                buttons.append([InlineKeyboardButton(f"Delete {name[:35]}", callback_data=f"delete:{file_id}")])
+                row = [InlineKeyboardButton(f"Download {index}", url=download_link)]
+                if view_link:
+                    row.append(InlineKeyboardButton(f"View {index}", url=view_link))
+                buttons.append(row)
+                buttons.append([InlineKeyboardButton(f"Delete {index}: {name[:28]}", callback_data=f"delete:{file_id}")])
 
         await message.reply_text(
             "\n".join(lines),
