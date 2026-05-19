@@ -40,6 +40,7 @@ def register_command_handlers(
             return
         await message.reply_text(
             "Send me a Telegram file and I will upload it to Google Drive.\n\n"
+            "After you send a file, I will ask for the Google Drive filename. Reply with a name or send /skip.\n\n"
             "Commands:\n"
             "/connect - connect Google Drive\n"
             "/disconnect - remove stored Google tokens\n"
