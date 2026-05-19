@@ -16,6 +16,8 @@ https://www.googleapis.com/auth/drive.file
 - `/folder <folder_id|folder_name|root>` - set the target Google Drive folder
 - `/files` - list recent files in the configured folder
 - `/status` - show Google connection, upload path, and storage status
+- `/public <file_id>` - make a Drive file public
+- `/private <file_id>` - remove public sharing from a Drive file
 - `/delete <file_id>` - delete a Drive file, also available through inline buttons from `/files`
 - Uploads documents, videos, audio, voice messages, video notes, animations, photos, stickers, and forwarded media
 - Asks for a custom Google Drive filename before uploading; `/skip` uses the default Telegram filename

@@ -47,6 +47,8 @@ def register_command_handlers(
             "/folder <folder_id|folder_name|root> - set upload folder\n"
             "/files - show recent files\n"
             "/status - show connection and storage status\n"
+            "/public <file_id> - make a Drive file public\n"
+            "/private <file_id> - remove public sharing from a Drive file\n"
             "/delete <file_id> - delete a Drive file"
         )
 
@@ -202,16 +204,62 @@ def register_command_handlers(
         )
         await message.reply_text("\n".join(lines))
 
+    @app.on_message(filters.private & filters.command("public"))
+    async def public(_: Client, message: Message) -> None:
+        if await reject_if_needed(message):
+            return
+        assert message.from_user is not None
+        file_id = _command_argument(message)
+        if not file_id:
+            await message.reply_text("Usage: /public <google_drive_file_id>")
+            return
+        try:
+            download_link = await drive_service.make_public(message.from_user.id, file_id)
+        except DriveNotConnectedError:
+            await message.reply_text("Google Drive is not connected. Run /connect first.")
+        except DriveAuthError as exc:
+            await message.reply_text(str(exc))
+        except FileNotFoundError:
+            await message.reply_text("That Drive file was not found.")
+        except Exception:
+            logger.exception("Failed to make Drive file public telegram_id=%s file_id=%s", message.from_user.id, file_id)
+            await message.reply_text("Could not make the file public. Check the server logs.")
+        else:
+            await message.reply_text(f"File is public.\n\nDownload:\n{download_link}")
+
+    @app.on_message(filters.private & filters.command("private"))
+    async def private(_: Client, message: Message) -> None:
+        if await reject_if_needed(message):
+            return
+        assert message.from_user is not None
+        file_id = _command_argument(message)
+        if not file_id:
+            await message.reply_text("Usage: /private <google_drive_file_id>")
+            return
+        try:
+            await drive_service.make_private(message.from_user.id, file_id)
+        except DriveNotConnectedError:
+            await message.reply_text("Google Drive is not connected. Run /connect first.")
+        except DriveAuthError as exc:
+            await message.reply_text(str(exc))
+        except FileNotFoundError:
+            await message.reply_text("That Drive file was not found.")
+        except Exception:
+            logger.exception("Failed to make Drive file private telegram_id=%s file_id=%s", message.from_user.id, file_id)
+            await message.reply_text("Could not make the file private. Check the server logs.")
+        else:
+            await message.reply_text(f"Public sharing removed for `{file_id}`.")
+
     @app.on_message(filters.private & filters.command("delete"))
     async def delete(_: Client, message: Message) -> None:
         if await reject_if_needed(message):
             return
         assert message.from_user is not None
-        parts = (message.text or "").split(maxsplit=1)
-        if len(parts) == 1:
+        file_id = _command_argument(message)
+        if not file_id:
             await message.reply_text("Usage: /delete <google_drive_file_id>\n\nYou can also use /files and tap a delete button.")
             return
-        await _delete_file(message, drive_service, message.from_user.id, parts[1].strip())
+        await _delete_file(message, drive_service, message.from_user.id, file_id)
 
     @app.on_callback_query(filters.regex(r"^delete:"))
     async def delete_callback(_: Client, callback: CallbackQuery) -> None:
@@ -265,6 +313,11 @@ def _format_size(raw_size: object) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024
     return f"{size:.1f} TB"
+
+
+def _command_argument(message: Message) -> str | None:
+    parts = (message.text or "").split(maxsplit=1)
+    return parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
 
 
 def _directory_usage(path: Path) -> dict[str, int]:

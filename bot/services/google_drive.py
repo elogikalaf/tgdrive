@@ -55,6 +55,15 @@ class GoogleDriveService:
         user = await self._connected_user(telegram_id)
         await asyncio.to_thread(self._delete_file_sync, user, file_id)
 
+    async def make_public(self, telegram_id: int, file_id: str) -> str:
+        user = await self._connected_user(telegram_id)
+        await asyncio.to_thread(self._make_public_sync, user, file_id)
+        return direct_download_url(file_id)
+
+    async def make_private(self, telegram_id: int, file_id: str) -> None:
+        user = await self._connected_user(telegram_id)
+        await asyncio.to_thread(self._make_private_sync, user, file_id)
+
     async def get_status(self, telegram_id: int) -> dict[str, Any]:
         user = await self.database.get_user(telegram_id)
         if not user or not user.google_refresh_token:
@@ -196,6 +205,35 @@ class GoogleDriveService:
                 raise FileNotFoundError(file_id) from exc
             raise
         logger.info("Deleted Drive file telegram_id=%s file_id=%s", user.telegram_id, file_id)
+
+    def _make_public_sync(self, user: User, file_id: str) -> None:
+        service = self._service_for_user(user)
+        try:
+            service.files().get(fileId=file_id, fields="id").execute()
+            self._make_file_public(service, file_id, user.telegram_id)
+        except HttpError as exc:
+            if exc.resp.status == 404:
+                raise FileNotFoundError(file_id) from exc
+            raise
+
+    def _make_private_sync(self, user: User, file_id: str) -> None:
+        service = self._service_for_user(user)
+        try:
+            service.files().get(fileId=file_id, fields="id").execute()
+            permissions = (
+                service.permissions()
+                .list(fileId=file_id, fields="permissions(id,type,role)")
+                .execute()
+                .get("permissions", [])
+            )
+            for permission in permissions:
+                if permission.get("type") in {"anyone", "domain"}:
+                    service.permissions().delete(fileId=file_id, permissionId=permission["id"]).execute()
+        except HttpError as exc:
+            if exc.resp.status == 404:
+                raise FileNotFoundError(file_id) from exc
+            raise
+        logger.info("Made Drive file private telegram_id=%s file_id=%s", user.telegram_id, file_id)
 
     def _get_status_sync(self, user: User) -> dict[str, Any]:
         service = self._service_for_user(user)
