@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
+from bot.handlers.ui import action_button, button_style
 from bot.services.google_drive import DriveAuthError, DriveNotConnectedError, GoogleDriveService
 
 
@@ -47,6 +48,11 @@ def register_media_handlers(
             allowed_telegram_ids is None or message.from_user.id in allowed_telegram_ids
         )
 
+    def callback_allowed(callback: CallbackQuery) -> bool:
+        return bool(callback.from_user) and (
+            allowed_telegram_ids is None or callback.from_user.id in allowed_telegram_ids
+        )
+
     @app.on_message(filters.private & MEDIA_FILTER)
     async def handle_media(_: Client, message: Message) -> None:
         if not allowed(message):
@@ -64,7 +70,13 @@ def register_media_handlers(
         await message.reply_text(
             "Send the Google Drive filename for this file.\n\n"
             f"Default: `{default_name}`\n\n"
-            "Send /skip to use the default name, or /cancel to cancel this upload."
+            "Send /skip to use the default name, or /cancel to cancel this upload.",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [action_button("Use default name", callback_data="upload:skip", style=button_style("SUCCESS"))],
+                    [action_button("Cancel upload", callback_data="upload:cancel", style=button_style("DANGER"))],
+                ]
+            ),
         )
 
     @app.on_message(filters.private & filters.command("skip"))
@@ -76,7 +88,7 @@ def register_media_handlers(
         if not pending:
             await message.reply_text("No upload is waiting for a filename.")
             return
-        await _process_pending_upload(message, pending, pending.default_name, drive_service, download_dir)
+        await _process_pending_upload(message, pending, pending.default_name, drive_service, download_dir, message.from_user.id)
 
     @app.on_message(filters.private & filters.command("cancel"))
     async def cancel_upload(_: Client, message: Message) -> None:
@@ -85,6 +97,32 @@ def register_media_handlers(
         assert message.from_user is not None
         pending = pending_uploads.pop(message.from_user.id, None)
         await message.reply_text("Upload canceled." if pending else "No upload is waiting for a filename.")
+
+    @app.on_callback_query(filters.regex(r"^upload:"))
+    async def upload_callback(_: Client, callback: CallbackQuery) -> None:
+        if not callback_allowed(callback):
+            await callback.answer("This bot is private.", show_alert=True)
+            return
+        assert callback.from_user is not None
+        if not callback.message:
+            await callback.answer()
+            return
+
+        action = (callback.data or "").split(":", 1)[1]
+        pending = pending_uploads.pop(callback.from_user.id, None)
+        if action == "cancel":
+            await callback.answer("Canceled.")
+            await callback.message.reply_text("Upload canceled." if pending else "No upload is waiting for a filename.")
+            return
+        if action != "skip":
+            await callback.answer("Invalid action.", show_alert=True)
+            return
+        if not pending:
+            await callback.answer("No pending upload.", show_alert=True)
+            return
+
+        await callback.answer("Using default name.")
+        await _process_pending_upload(callback.message, pending, pending.default_name, drive_service, download_dir, callback.from_user.id)
 
     @app.on_message(filters.private & filters.text)
     async def receive_custom_name(_: Client, message: Message) -> None:
@@ -101,7 +139,7 @@ def register_media_handlers(
             return
 
         drive_name = _custom_drive_name(message.text, pending.default_name)
-        await _process_pending_upload(message, pending, drive_name, drive_service, download_dir)
+        await _process_pending_upload(message, pending, drive_name, drive_service, download_dir, message.from_user.id)
 
 
 async def _reject_private_text(message: Message, allowed) -> bool:
@@ -118,8 +156,8 @@ async def _process_pending_upload(
     drive_name: str,
     drive_service: GoogleDriveService,
     download_dir: Path,
+    telegram_id: int,
 ) -> None:
-    assert response_message.from_user is not None
     drive_name = _dedupe_drive_name(drive_name, pending.message.id)
     status = await response_message.reply_text("Downloading from Telegram...")
     local_path: Path | None = None
@@ -129,13 +167,13 @@ async def _process_pending_upload(
         downloaded = await pending.message.download(
             file_name=str(target_path),
             progress=_download_progress,
-            progress_args=(response_message.from_user.id, drive_name),
+            progress_args=(telegram_id, drive_name),
         )
         if not downloaded:
             raise RuntimeError("Telegram download returned no file path")
         local_path = Path(downloaded)
         await status.edit_text("Uploading to Google Drive...")
-        uploaded = await drive_service.upload_file(response_message.from_user.id, local_path, drive_name)
+        uploaded = await drive_service.upload_file(telegram_id, local_path, drive_name)
     except DriveNotConnectedError:
         await status.edit_text("Google Drive is not connected. Run /connect first.")
         return
@@ -143,7 +181,7 @@ async def _process_pending_upload(
         await status.edit_text(str(exc))
         return
     except Exception:
-        logger.exception("Media upload failed telegram_id=%s", response_message.from_user.id)
+        logger.exception("Media upload failed telegram_id=%s", telegram_id)
         await status.edit_text("Upload failed. Check the server logs.")
         return
     finally:

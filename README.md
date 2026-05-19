@@ -11,6 +11,7 @@ https://www.googleapis.com/auth/drive.file
 ## Features
 
 - `/start` - show available commands
+- Button menu for Google Drive connection, status, folder help, recent files, sharing, deletion, and upload naming
 - `/connect` - start Google OAuth
 - `/disconnect` - remove stored Google OAuth tokens
 - `/folder <folder_id|folder_name|root>` - set the target Google Drive folder
@@ -20,7 +21,7 @@ https://www.googleapis.com/auth/drive.file
 - `/private <file_id>` - remove public sharing from a Drive file
 - `/delete <file_id>` - delete a Drive file, also available through inline buttons from `/files`
 - Uploads documents, videos, audio, voice messages, video notes, animations, photos, stickers, and forwarded media
-- Asks for a custom Google Drive filename before uploading; `/skip` uses the default Telegram filename
+- Asks for a custom Google Drive filename before uploading; `/skip` or the default-name button uses the default Telegram filename
 - Appends the Telegram message ID to uploaded filenames to avoid duplicate Drive names
 - Makes uploaded files public and returns direct Google Drive download links
 
