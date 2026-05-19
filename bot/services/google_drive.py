@@ -181,7 +181,7 @@ class GoogleDriveService:
                 q=query,
                 pageSize=limit,
                 orderBy="createdTime desc",
-                fields="files(id,name,size,createdTime,webViewLink)",
+                fields="files(id,name,size,createdTime,webViewLink,permissions(id,type,role))",
             )
             .execute()
         )
@@ -189,6 +189,7 @@ class GoogleDriveService:
         for item in files:
             if item.get("id"):
                 item["downloadLink"] = direct_download_url(item["id"])
+            item["sharingState"] = self._sharing_state(item.get("permissions", []))
             item["folderPath"] = folder_path
         return files
 
@@ -349,6 +350,12 @@ class GoogleDriveService:
         except HttpError:
             logger.warning("Could not fetch Drive account or storage quota")
             return None
+
+    def _sharing_state(self, permissions: list[dict[str, Any]]) -> str:
+        for permission in permissions:
+            if permission.get("type") in {"anyone", "domain"} and permission.get("role") == "reader":
+                return "Public"
+        return "Private"
 
 
 def _escape_drive_query_string(value: str) -> str:

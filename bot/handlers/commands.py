@@ -144,10 +144,12 @@ def register_command_handlers(
             download_link = item.get("downloadLink", "")
             view_link = item.get("webViewLink", "")
             folder_path = item.get("folderPath", "Drive root")
+            sharing_state = item.get("sharingState", "Unknown")
             lines.append(
                 f"{index}. `{name}`\n"
                 f"   Size: {size}\n"
                 f"   Path: {folder_path}\n"
+                f"   Sharing: {sharing_state}\n"
                 f"   ID: `{file_id}`"
             )
             if file_id:
