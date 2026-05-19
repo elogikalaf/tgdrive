@@ -158,10 +158,10 @@ class GoogleDriveService:
     def _delete_file_sync(self, user: User, file_id: str) -> None:
         service = self._service_for_user(user)
         try:
-            expected_parent = user.google_folder_id or service.files().get(fileId="root", fields="id").execute()["id"]
-            metadata = service.files().get(fileId=file_id, fields="parents,trashed").execute()
-            if expected_parent not in metadata.get("parents", []):
-                raise PermissionError("File is outside the configured Drive folder")
+            if user.google_folder_id:
+                metadata = service.files().get(fileId=file_id, fields="parents,trashed").execute()
+                if user.google_folder_id not in metadata.get("parents", []):
+                    raise PermissionError("File is outside the configured Drive folder")
             service.files().delete(fileId=file_id).execute()
         except HttpError as exc:
             if exc.resp.status == 404:

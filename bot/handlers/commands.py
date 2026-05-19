@@ -149,6 +149,9 @@ def register_command_handlers(
         file_id = (callback.data or "").split(":", 1)[1]
         try:
             await drive_service.delete_file(callback.from_user.id, file_id)
+        except FileNotFoundError:
+            await callback.answer("File was not found.", show_alert=True)
+            return
         except PermissionError:
             await callback.answer("File is outside the configured folder.", show_alert=True)
             return
