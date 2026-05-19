@@ -118,7 +118,8 @@ def register_command_handlers(
             name = item.get("name", "Untitled")
             file_id = item.get("id", "")
             size = _format_size(item.get("size"))
-            lines.append(f"- {name} ({size})\n  `{file_id}`")
+            download_link = item.get("downloadLink", "")
+            lines.append(f"- {name} ({size})\n  `{file_id}`\n  {download_link}")
             if file_id:
                 buttons.append([InlineKeyboardButton(f"Delete {name[:35]}", callback_data=f"delete:{file_id}")])
 

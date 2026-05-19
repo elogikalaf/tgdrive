@@ -22,6 +22,10 @@ from bot.services.oauth_service import SCOPES
 logger = logging.getLogger(__name__)
 
 
+def direct_download_url(file_id: str) -> str:
+    return f"https://drive.google.com/uc?id={file_id}&export=download"
+
+
 class DriveNotConnectedError(RuntimeError):
     pass
 
@@ -126,6 +130,9 @@ class GoogleDriveService:
                     last_logged = progress
 
         logger.info("Drive upload complete telegram_id=%s file=%s", user.telegram_id, drive_name)
+        file_id = response["id"]
+        self._make_file_public(service, file_id, user.telegram_id)
+        response["downloadLink"] = direct_download_url(file_id)
         return response
 
     def _list_files_sync(self, user: User, limit: int) -> list[dict[str, Any]]:
@@ -142,7 +149,11 @@ class GoogleDriveService:
             )
             .execute()
         )
-        return result.get("files", [])
+        files = result.get("files", [])
+        for item in files:
+            if item.get("id"):
+                item["downloadLink"] = direct_download_url(item["id"])
+        return files
 
     def _delete_file_sync(self, user: User, file_id: str) -> None:
         service = self._service_for_user(user)
@@ -157,3 +168,11 @@ class GoogleDriveService:
                 raise FileNotFoundError(file_id) from exc
             raise
         logger.info("Deleted Drive file telegram_id=%s file_id=%s", user.telegram_id, file_id)
+
+    def _make_file_public(self, service, file_id: str, telegram_id: int) -> None:
+        service.permissions().create(
+            fileId=file_id,
+            body={"role": "reader", "type": "anyone"},
+            fields="id",
+        ).execute()
+        logger.info("Made Drive file public telegram_id=%s file_id=%s", telegram_id, file_id)

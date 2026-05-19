@@ -78,10 +78,11 @@ def register_media_handlers(
                 except OSError:
                     logger.exception("Failed to delete temporary file path=%s", local_path)
 
-        link = uploaded.get("webViewLink")
         text = f"Uploaded `{uploaded.get('name', drive_name)}` to Google Drive."
-        if link:
-            text += f"\n{link}"
+        if uploaded.get("downloadLink"):
+            text += f"\n\nDownload:\n{uploaded['downloadLink']}"
+        if uploaded.get("webViewLink"):
+            text += f"\n\nView:\n{uploaded['webViewLink']}"
         await status.edit_text(text)
 
 

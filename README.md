@@ -1,6 +1,6 @@
 # Drivebot
 
-A small personal Telegram bot that receives Telegram media, downloads it to local disk, uploads it to Google Drive, and deletes the temporary local file afterward.
+A small personal Telegram bot that receives Telegram media, downloads it to local disk, uploads it to Google Drive, makes the uploaded file public to anyone with the link, and deletes the temporary local file afterward.
 
 It uses Pyrofork polling for Telegram, SQLite for persistence, FastAPI for the Google OAuth callback, and the minimal Drive scope:
 
@@ -17,6 +17,7 @@ https://www.googleapis.com/auth/drive.file
 - `/files` - list recent files in the configured folder
 - `/delete <file_id>` - delete a Drive file, also available through inline buttons from `/files`
 - Uploads documents, videos, audio, voice messages, video notes, animations, photos, stickers, and forwarded media
+- Makes uploaded files public and returns direct Google Drive download links
 
 ## Requirements
 
@@ -75,6 +76,8 @@ https://api.your-domain.example/google/callback
 9. If your app is in testing mode, add your Google account as a test user.
 
 The bot requests only `drive.file`, so it can manage files it creates or files explicitly opened/selected by the app. For this bot’s normal upload flow, that is enough.
+
+Uploaded files are shared as `anyone with the link can read`, so treat the returned links as public.
 
 ## Folder IDs
 
