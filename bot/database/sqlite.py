@@ -40,11 +40,13 @@ class Database:
                 CREATE TABLE IF NOT EXISTS oauth_states (
                     state TEXT PRIMARY KEY,
                     telegram_id INTEGER NOT NULL,
+                    code_verifier TEXT NOT NULL DEFAULT '',
                     expires_at INTEGER NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            self._ensure_column(conn, "oauth_states", "code_verifier", "TEXT NOT NULL DEFAULT ''")
             conn.commit()
         os.chmod(self.path, 0o600)
 
@@ -127,20 +129,23 @@ class Database:
             (telegram_id,),
         )
 
-    async def save_oauth_state(self, state: str, telegram_id: int, expires_at: int) -> None:
+    async def save_oauth_state(self, state: str, telegram_id: int, code_verifier: str, expires_at: int) -> None:
         await asyncio.to_thread(
             self._execute,
-            "INSERT OR REPLACE INTO oauth_states (state, telegram_id, expires_at) VALUES (?, ?, ?)",
-            (state, telegram_id, expires_at),
+            """
+            INSERT OR REPLACE INTO oauth_states (state, telegram_id, code_verifier, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (state, telegram_id, code_verifier, expires_at),
         )
 
-    async def consume_oauth_state(self, state: str, now: int) -> int | None:
+    async def consume_oauth_state(self, state: str, now: int) -> tuple[int, str] | None:
         return await asyncio.to_thread(self._consume_oauth_state_sync, state, now)
 
-    def _consume_oauth_state_sync(self, state: str, now: int) -> int | None:
+    def _consume_oauth_state_sync(self, state: str, now: int) -> tuple[int, str] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT telegram_id, expires_at FROM oauth_states WHERE state = ?",
+                "SELECT telegram_id, code_verifier, expires_at FROM oauth_states WHERE state = ?",
                 (state,),
             ).fetchone()
             conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
@@ -148,9 +153,23 @@ class Database:
             conn.commit()
         if not row or int(row["expires_at"]) < now:
             return None
-        return int(row["telegram_id"])
+        return int(row["telegram_id"]), str(row["code_verifier"])
 
     def _execute(self, query: str, params: tuple[Any, ...]) -> None:
         with self._connect() as conn:
             conn.execute(query, params)
             conn.commit()
+
+    def _ensure_column(
+        self,
+        conn: sqlite3.Connection,
+        table_name: str,
+        column_name: str,
+        column_definition: str,
+    ) -> None:
+        columns = {
+            row["name"]
+            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        if column_name not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
