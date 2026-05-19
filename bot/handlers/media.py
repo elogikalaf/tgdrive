@@ -120,6 +120,7 @@ async def _process_pending_upload(
     download_dir: Path,
 ) -> None:
     assert response_message.from_user is not None
+    drive_name = _dedupe_drive_name(drive_name, pending.message.id)
     status = await response_message.reply_text("Downloading from Telegram...")
     local_path: Path | None = None
     target_path = download_dir / _local_name(pending.message, drive_name)
@@ -168,6 +169,13 @@ def _custom_drive_name(raw_name: str, default_name: str) -> str:
     if default_suffix and not custom_suffix:
         custom_name = f"{custom_name}{default_suffix}"
     return custom_name
+
+
+def _dedupe_drive_name(filename: str, telegram_message_id: int) -> str:
+    path = Path(filename)
+    suffix = path.suffix
+    stem = path.stem if suffix else filename
+    return f"{stem}_tg{telegram_message_id}{suffix}"
 
 
 def _download_progress(current: int, total: int, telegram_id: int, file_name: str) -> None:

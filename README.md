@@ -19,6 +19,7 @@ https://www.googleapis.com/auth/drive.file
 - `/delete <file_id>` - delete a Drive file, also available through inline buttons from `/files`
 - Uploads documents, videos, audio, voice messages, video notes, animations, photos, stickers, and forwarded media
 - Asks for a custom Google Drive filename before uploading; `/skip` uses the default Telegram filename
+- Appends the Telegram message ID to uploaded filenames to avoid duplicate Drive names
 - Makes uploaded files public and returns direct Google Drive download links
 
 ## Requirements
