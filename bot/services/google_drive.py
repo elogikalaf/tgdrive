@@ -55,8 +55,20 @@ class GoogleDriveService:
         user = await self._connected_user(telegram_id)
         await asyncio.to_thread(self._delete_file_sync, user, file_id)
 
+    async def get_status(self, telegram_id: int) -> dict[str, Any]:
+        user = await self.database.get_user(telegram_id)
+        if not user or not user.google_refresh_token:
+            return {
+                "connected": False,
+                "folderPath": "Drive root" if not user or not user.google_folder_id else f"Folder ID: {user.google_folder_id}",
+                "folderId": user.google_folder_id if user else None,
+                "account": None,
+                "quota": None,
+            }
+        return await asyncio.to_thread(self._get_status_sync, user)
+
     async def set_upload_folder(self, telegram_id: int, folder_value: str | None) -> dict[str, str | bool | None]:
-        if not folder_value or folder_value.lower() == "root":
+        if not folder_value or folder_value.lower() == "root" or folder_value == "/":
             await self.database.set_folder(telegram_id, None)
             return {"id": None, "name": "Drive root", "created": False}
 
@@ -185,6 +197,16 @@ class GoogleDriveService:
             raise
         logger.info("Deleted Drive file telegram_id=%s file_id=%s", user.telegram_id, file_id)
 
+    def _get_status_sync(self, user: User) -> dict[str, Any]:
+        service = self._service_for_user(user)
+        return {
+            "connected": True,
+            "folderPath": self._folder_path(service, user.google_folder_id),
+            "folderId": user.google_folder_id,
+            "account": self._about_user(service),
+            "quota": self._storage_quota(service),
+        }
+
     def _resolve_or_create_folder_sync(self, user: User, folder_value: str) -> dict[str, str | bool]:
         service = self._service_for_user(user)
         folder_value = folder_value.strip()
@@ -265,6 +287,30 @@ class GoogleDriveService:
             logger.warning("Could not resolve Drive folder name folder_id=%s", folder_id)
             return f"Drive root / {folder_id}"
         return f"Drive root / {folder.get('name', folder_id)}"
+
+    def _about_user(self, service) -> dict[str, str] | None:
+        about = self._about(service)
+        return about.get("user") if about else None
+
+    def _storage_quota(self, service) -> dict[str, str] | None:
+        about = self._about(service)
+        return about.get("storageQuota") if about else None
+
+    def _about(self, service) -> dict[str, Any] | None:
+        try:
+            return (
+                service.about()
+                .get(
+                    fields=(
+                        "user(displayName,emailAddress),"
+                        "storageQuota(limit,usage,usageInDrive,usageInDriveTrash)"
+                    )
+                )
+                .execute()
+            )
+        except HttpError:
+            logger.warning("Could not fetch Drive account or storage quota")
+            return None
 
 
 def _escape_drive_query_string(value: str) -> str:

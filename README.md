@@ -15,6 +15,7 @@ https://www.googleapis.com/auth/drive.file
 - `/disconnect` - remove stored Google OAuth tokens
 - `/folder <folder_id|folder_name|root>` - set the target Google Drive folder
 - `/files` - list recent files in the configured folder
+- `/status` - show Google connection, upload path, and storage status
 - `/delete <file_id>` - delete a Drive file, also available through inline buttons from `/files`
 - Uploads documents, videos, audio, voice messages, video notes, animations, photos, stickers, and forwarded media
 - Makes uploaded files public and returns direct Google Drive download links

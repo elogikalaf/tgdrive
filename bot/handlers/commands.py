@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -18,6 +19,7 @@ def register_command_handlers(
     database: Database,
     oauth_service: OAuthService,
     drive_service: GoogleDriveService,
+    download_dir: Path,
     allowed_telegram_ids: set[int] | None,
 ) -> None:
     def allowed(message: Message) -> bool:
@@ -41,8 +43,9 @@ def register_command_handlers(
             "Commands:\n"
             "/connect - connect Google Drive\n"
             "/disconnect - remove stored Google tokens\n"
-            "/folder <folder_id|root> - set upload folder\n"
+            "/folder <folder_id|folder_name|root> - set upload folder\n"
             "/files - show recent files\n"
+            "/status - show connection and storage status\n"
             "/delete <file_id> - delete a Drive file"
         )
 
@@ -156,6 +159,48 @@ def register_command_handlers(
             reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
         )
 
+    @app.on_message(filters.private & filters.command("status"))
+    async def status(_: Client, message: Message) -> None:
+        if await reject_if_needed(message):
+            return
+        assert message.from_user is not None
+
+        try:
+            drive_status = await drive_service.get_status(message.from_user.id)
+        except DriveAuthError as exc:
+            await message.reply_text(str(exc))
+            return
+        except Exception:
+            logger.exception("Failed to build status telegram_id=%s", message.from_user.id)
+            await message.reply_text("Could not load status. Check the server logs.")
+            return
+
+        temp_usage = _directory_usage(download_dir)
+        lines = [
+            "Status",
+            f"Google Drive: {'connected' if drive_status['connected'] else 'not connected'}",
+            f"Upload path: {drive_status['folderPath']}",
+        ]
+
+        account = drive_status.get("account")
+        if account:
+            account_name = account.get("displayName") or "Unknown"
+            account_email = account.get("emailAddress") or "email unavailable"
+            lines.append(f"Google account: {account_name} <{account_email}>")
+
+        quota = drive_status.get("quota")
+        if quota:
+            lines.extend(_format_quota_lines(quota))
+        elif drive_status["connected"]:
+            lines.append("Google storage: unavailable with current API response")
+
+        lines.extend(
+            [
+                f"Temp downloads: {_format_size(temp_usage['bytes'])} in {temp_usage['files']} files",
+            ]
+        )
+        await message.reply_text("\n".join(lines))
+
     @app.on_message(filters.private & filters.command("delete"))
     async def delete(_: Client, message: Message) -> None:
         if await reject_if_needed(message):
@@ -219,3 +264,35 @@ def _format_size(raw_size: object) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024
     return f"{size:.1f} TB"
+
+
+def _directory_usage(path: Path) -> dict[str, int]:
+    total_bytes = 0
+    total_files = 0
+    if not path.exists():
+        return {"bytes": 0, "files": 0}
+    for item in path.rglob("*"):
+        if item.is_file():
+            total_files += 1
+            total_bytes += item.stat().st_size
+    return {"bytes": total_bytes, "files": total_files}
+
+
+def _format_quota_lines(quota: dict[str, str]) -> list[str]:
+    usage = int(quota.get("usage", 0))
+    usage_in_drive = int(quota.get("usageInDrive", 0))
+    trash = int(quota.get("usageInDriveTrash", 0))
+    raw_limit = quota.get("limit")
+    if raw_limit:
+        limit = int(raw_limit)
+        free = max(limit - usage, 0)
+        return [
+            f"Google storage: {_format_size(usage)} used / {_format_size(limit)} total",
+            f"Google free: {_format_size(free)}",
+            f"Drive files: {_format_size(usage_in_drive)} used, {_format_size(trash)} in trash",
+        ]
+    return [
+        f"Google storage: {_format_size(usage)} used",
+        "Google free: unlimited or unavailable",
+        f"Drive files: {_format_size(usage_in_drive)} used, {_format_size(trash)} in trash",
+    ]

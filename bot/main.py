@@ -55,6 +55,7 @@ async def main() -> None:
         database=database,
         oauth_service=oauth_service,
         drive_service=drive_service,
+        download_dir=settings.download_dir,
         allowed_telegram_ids=settings.allowed_telegram_ids,
     )
     register_media_handlers(
