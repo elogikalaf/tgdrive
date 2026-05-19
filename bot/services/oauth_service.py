@@ -37,7 +37,7 @@ class OAuthService:
         flow = self._new_flow()
         authorization_url, _ = flow.authorization_url(
             access_type="offline",
-            include_granted_scopes=True,
+            include_granted_scopes="true",
             prompt="consent",
             state=state,
         )
