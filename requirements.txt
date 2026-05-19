@@ -1,0 +1,8 @@
+pyrofork>=2.3.45
+tgcrypto>=1.2.5
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.1
+google-api-python-client>=2.130.0
+google-auth>=2.29.0
+google-auth-oauthlib>=1.2.0

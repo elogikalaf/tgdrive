@@ -1,0 +1,12 @@
+.env
+*.session
+*.session-journal
+__pycache__/
+*.py[cod]
+.venv/
+downloads/*
+tokens/*
+credentials/*
+!downloads/.gitkeep
+!tokens/.gitkeep
+!credentials/.gitkeep
