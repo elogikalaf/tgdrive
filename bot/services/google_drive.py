@@ -34,6 +34,10 @@ class DriveAuthError(RuntimeError):
     pass
 
 
+class DriveFolderError(RuntimeError):
+    pass
+
+
 class GoogleDriveService:
     def __init__(self, database: Database, client_secrets_file: Path) -> None:
         self.database = database
@@ -50,6 +54,16 @@ class GoogleDriveService:
     async def delete_file(self, telegram_id: int, file_id: str) -> None:
         user = await self._connected_user(telegram_id)
         await asyncio.to_thread(self._delete_file_sync, user, file_id)
+
+    async def set_upload_folder(self, telegram_id: int, folder_value: str | None) -> dict[str, str | bool | None]:
+        if not folder_value or folder_value.lower() == "root":
+            await self.database.set_folder(telegram_id, None)
+            return {"id": None, "name": "Drive root", "created": False}
+
+        user = await self._connected_user(telegram_id)
+        folder = await asyncio.to_thread(self._resolve_or_create_folder_sync, user, folder_value)
+        await self.database.set_folder(telegram_id, str(folder["id"]))
+        return folder
 
     async def _connected_user(self, telegram_id: int) -> User:
         user = await self.database.get_user(telegram_id)
@@ -169,6 +183,69 @@ class GoogleDriveService:
             raise
         logger.info("Deleted Drive file telegram_id=%s file_id=%s", user.telegram_id, file_id)
 
+    def _resolve_or_create_folder_sync(self, user: User, folder_value: str) -> dict[str, str | bool]:
+        service = self._service_for_user(user)
+        folder_value = folder_value.strip()
+        if not folder_value:
+            raise DriveFolderError("Folder value cannot be empty")
+
+        existing_by_id = self._get_folder_by_id(service, folder_value)
+        if existing_by_id:
+            return {**existing_by_id, "created": False}
+
+        existing_by_name = self._find_folder_by_name(service, folder_value)
+        if existing_by_name:
+            return {**existing_by_name, "created": False}
+
+        created = (
+            service.files()
+            .create(
+                body={
+                    "name": folder_value,
+                    "mimeType": "application/vnd.google-apps.folder",
+                },
+                fields="id,name",
+            )
+            .execute()
+        )
+        logger.info(
+            "Created Drive folder telegram_id=%s folder_name=%s folder_id=%s",
+            user.telegram_id,
+            folder_value,
+            created["id"],
+        )
+        return {"id": created["id"], "name": created["name"], "created": True}
+
+    def _get_folder_by_id(self, service, folder_id: str) -> dict[str, str] | None:
+        try:
+            folder = service.files().get(fileId=folder_id, fields="id,name,mimeType,trashed").execute()
+        except HttpError as exc:
+            if exc.resp.status == 404:
+                return None
+            raise
+        if folder.get("trashed"):
+            raise DriveFolderError("That Drive folder is in trash")
+        if folder.get("mimeType") != "application/vnd.google-apps.folder":
+            raise DriveFolderError("That Drive ID is not a folder")
+        return {"id": folder["id"], "name": folder["name"]}
+
+    def _find_folder_by_name(self, service, folder_name: str) -> dict[str, str] | None:
+        escaped_name = _escape_drive_query_string(folder_name)
+        result = (
+            service.files()
+            .list(
+                q=(
+                    "mimeType = 'application/vnd.google-apps.folder' "
+                    f"and name = '{escaped_name}' and trashed = false"
+                ),
+                pageSize=1,
+                fields="files(id,name)",
+            )
+            .execute()
+        )
+        folders = result.get("files", [])
+        return folders[0] if folders else None
+
     def _make_file_public(self, service, file_id: str, telegram_id: int) -> None:
         service.permissions().create(
             fileId=file_id,
@@ -176,3 +253,7 @@ class GoogleDriveService:
             fields="id",
         ).execute()
         logger.info("Made Drive file public telegram_id=%s file_id=%s", telegram_id, file_id)
+
+
+def _escape_drive_query_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")

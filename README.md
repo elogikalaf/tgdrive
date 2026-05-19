@@ -13,7 +13,7 @@ https://www.googleapis.com/auth/drive.file
 - `/start` - show available commands
 - `/connect` - start Google OAuth
 - `/disconnect` - remove stored Google OAuth tokens
-- `/folder <folder_id|root>` - set the target Google Drive folder
+- `/folder <folder_id|folder_name|root>` - set the target Google Drive folder
 - `/files` - list recent files in the configured folder
 - `/delete <file_id>` - delete a Drive file, also available through inline buttons from `/files`
 - Uploads documents, videos, audio, voice messages, video notes, animations, photos, stickers, and forwarded media
@@ -79,17 +79,21 @@ The bot requests only `drive.file`, so it can manage files it creates or files e
 
 Uploaded files are shared as `anyone with the link can read`, so treat the returned links as public.
 
-## Folder IDs
+## Folders
 
 By default, uploads go to Drive root. To upload into a folder:
 
-1. Open the folder in Google Drive.
-2. Copy the folder ID from the URL.
-3. Send this to the bot:
+Send either a Drive folder ID or a folder name:
 
 ```text
 /folder your_google_drive_folder_id
 ```
+
+```text
+/folder tg
+```
+
+If the folder name is not visible to the app, the bot creates that folder and stores its real Drive folder ID.
 
 Use `/folder root` to return to Drive root.
 

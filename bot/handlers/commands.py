@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.database.sqlite import Database
-from bot.services.google_drive import DriveAuthError, DriveNotConnectedError, GoogleDriveService
+from bot.services.google_drive import DriveAuthError, DriveFolderError, DriveNotConnectedError, GoogleDriveService
 from bot.services.oauth_service import OAuthService
 
 
@@ -84,11 +84,28 @@ def register_command_handlers(
             await message.reply_text(f"Current upload folder: `{folder_id or 'Drive root'}`")
             return
 
-        folder_id = parts[1].strip()
-        if folder_id.lower() == "root":
-            folder_id = ""
-        await database.set_folder(message.from_user.id, folder_id or None)
-        await message.reply_text(f"Upload folder set to: `{folder_id or 'Drive root'}`")
+        folder_value = parts[1].strip()
+        try:
+            folder_info = await drive_service.set_upload_folder(message.from_user.id, folder_value)
+        except DriveNotConnectedError:
+            await message.reply_text("Google Drive is not connected. Run /connect first.")
+            return
+        except DriveAuthError as exc:
+            await message.reply_text(str(exc))
+            return
+        except DriveFolderError as exc:
+            await message.reply_text(str(exc))
+            return
+        except Exception:
+            logger.exception("Failed to set Drive folder telegram_id=%s", message.from_user.id)
+            await message.reply_text("Could not set the Drive folder. Check the server logs.")
+            return
+
+        created_text = "Created and selected" if folder_info["created"] else "Selected"
+        await message.reply_text(
+            f"{created_text} upload folder: `{folder_info['name']}`\n"
+            f"Folder ID: `{folder_info['id'] or 'Drive root'}`"
+        )
 
     @app.on_message(filters.private & filters.command("files"))
     async def files(_: Client, message: Message) -> None:
